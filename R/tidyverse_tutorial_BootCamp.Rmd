@@ -1,0 +1,448 @@
+---
+title: "Tidyverse & ggplot2 - ICD Bootcamp"
+author: "Syed Murtuza Baker"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_notebook:
+    theme: flatly
+    toc: yes
+    number_sections: true
+    toc_float:
+      collapsed: true
+      smooth_scroll: true
+editor_options: 
+  chunk_output_type: inline
+---
+
+
+
+# Tidyverse
+tidyverse.org defines Tidyverse as
+
+> The tidyverse is an opinionated collection of R packages designed for data science. All packages share an underlying design philosophy, grammar, and data structures.
+
+```{r}
+library(tidyverse)
+library(dplyr)
+library(scater)
+```
+
+We will use single-cell RNA sequencing on 6826 stem cells from Chronic myelomonocytic leukaemia (CMML) patients and healthy controls using the droplet-based, ultra-high-throughput 10x platform. We found substantial inter and intra-patient heterogeneity, with CMML stem cells displaying distinctive transcriptional programs. Compared with normal controls, CMML stem cells exhibited transcriptomes characterized by increased expression of myeloid-lineage and cell cycle genes, and lower expression of genes selectively expressed by normal haematopoietic stem cells. 
+
+```{r}
+sce <- readRDS('sce.rds')
+sce
+```
+
+## Tibble
+- Tibbles are data-frames
+- `tibble()` does much less: it never changes the type of the inputs (e.g. it never converts strings to factors!)
+- it never changes the names of variables, and it never creates row names.
+- tibble can have column names that are not valid R variable names, aka *non-syntactic* names.
+```{r}
+tb <- tibble(
+  `:)` = "smile", 
+  ` ` = "space",
+  `2000` = "number"
+)
+tb
+```
+
+## Pipe `%>%`
+Pipe `%>%` passes the output from one stage to the other.
+```{r}
+tbl_df(colData(sce))
+```
+```{r}
+names(colData(sce))
+```
+
+
+```{r}
+tbl_df(colData(sce)) %>%
+  group_by(Sample) %>%
+  summarise(
+    total.features = mean(total_features),
+    total.counts = mean(total_counts)
+  )
+```
+
+## `dplyr` - Functions as verbs.
+
+__The most useful__
+
+- `select()`: select columns
+- `mutate()`: create new variables, change existing
+- `filter()`: subset your data by some criterion
+- `summarize()`: summarize your data in some way
+- `group_by()`: group your data by a variable
+- `slice()`: grab specific rows
+- `select()`: select an observation
+
+__Some others__
+
+- `count()`: count your data
+- `arrange()`: arrange your data by a column or variable
+- `distinct()`: gather all distinct values of a variable
+- `n_distinct()`: count how many distinct values you have (only works with summarize)
+- `n()`: count how many observation you have for a subgroup
+- `sample_n()`: Grab an N sample of your data
+- `ungroup()`: ungroup grouped data by a variable
+- `top_n(`): get the top N number of entries from a data frame
+
+__To make it easier we copy the metadata for our `SingleCellExperiment` object `sce` to `d` __
+
+```{r}
+d <- tbl_df(colData(sce))
+```
+
+### `Select` : To select collumns
+```{r}
+select(d, Sample, Cluster, cellType)
+```
+
+```{r}
+d %>% 
+  select(Sample, Cluster, cellType)
+```
+
+### `Filter` : To select rows
+```{r}
+d %>% 
+  filter(cellType == "HSC")
+```
+
+```{r}
+d %>% 
+  select(barcode, Sample, total_features, cellType, Cluster) %>%
+  filter(Sample == "BC572")
+
+```
+
+```{r}
+d %>% 
+  filter(cellType == "Erythrocytes", pct_counts_Mt > 1.5) %>% 
+  select(barcode, Sample, pct_counts_Mt, cellType, Cluster)
+```
+
+### `Mutate`: 
+To create new variables in the data table:
+```{r}
+d_exp <- d
+d_exp <- cbind(d_exp, t(logcounts(sce)[c('KLF4','RUNX1','EGR1'),]))
+```
+
+```{r}
+d_exp
+```
+
+```{r}
+d_exp %>% 
+  mutate(Klf4Diff = abs(KLF4 - RUNX1)) %>%
+  select(barcode, Sample, cellType, Klf4Diff)
+```
+
+
+
+### `Arrange`: 
+To order the data by a particular variable:
+
+```{r}
+d_exp %>% 
+  mutate(Klf4Diff = abs(KLF4 - RUNX1)) %>% 
+  arrange(desc(Klf4Diff)) %>% 
+  slice(1)
+```
+### `Slice`: 
+To slice your data by rows:
+
+```{r}
+# The top 5 goleadas?
+d_exp %>% 
+  mutate(Klf4Diff = abs(KLF4 - RUNX1)) %>% 
+  arrange(desc(Klf4Diff)) %>% 
+  slice(1:5)  # slice_max here would also do the trick
+```
+
+```{r}
+# The top 5 goleadas?
+d_exp %>% 
+  mutate(Klf4Diff = (KLF4 - RUNX1)) %>% 
+  arrange(desc(Klf4Diff)) %>% 
+  select(barcode, Sample, cellType, Klf4Diff) %>%
+  slice_min(Klf4Diff, n = 5)
+```
+
+
+### Group by + sumarize : forget about loops
+
+__First__: group by a particular variables
+__Second__: summarize the data with new statistics.
+__Summarize__: Turn many rows into one.
+
+Examples:
+
+- min(x) - minimum value of vector x.
+- max(x) - maximum value of vector x.
+- mean(x) - mean value of vector x.
+- median(x) - median value of vector x.
+- quantile(x, p) - pth quantile of vector x.
+- sd(x) - standard deviation of vector x.
+- var(x) - variance of vector x.
+- IQR(x) - Inter Quartile Range (IQR) of vector x.
+- diff(range(x)) - total range of vector x.
+
+```{r}
+d %>% 
+  group_by(cellType) %>% 
+  summarise(mean_total_counts = mean(total_counts, na.rm = TRUE), sd_total_counts = sd(total_counts), 
+     mean_pct_Mt_count = mean(pct_counts_Mt), count = n()) %>% 
+  #ungroup() %>% 
+  slice_max(., n=20, order_by = mean_total_counts)  # note here, it does 
+```
+
+__Note: `mutate()` either changes an existing column or adds a new one. `summarise()` calculates a single value (per group). As you can see, in the first example, new column is added.__
+
+```{r}
+d %>% 
+count(Sample, cellType)
+```
+
+# Plotting in R using `ggplot2`
+
+`GGPlot2` is a powerful and a flexible R package, implemented by Hadley Wickham, for producing elegant graphics piece by piece (Wickham et al. 2017).
+
+The `gg` in `ggplot2` means Grammar of Graphics, a graphic concept which describes plots by using a “grammar”. According to the ggplot2 concept, a plot can be divided into different fundamental parts: 
+
+> Plot = Data + Aesthetics + Geometry
+
+
+1. __Data:__ a data frame
+2. __Aesthetics:__ used to indicate the x and y variables. It can be also used to control the color, the size and the shape of points, etc…..
+3. __Geometry:__ corresponds to the type of graphics (scatter plot, histogram, box plot, line plot, ….)
+4. additional layers for customization — title, labels, axis, etc.
+
+
+## First plotting
+The main function in the `ggplot2` package is `ggplot()`, which can be used to initialize the plotting system with __data__ and __x/y__ variables.
+
+`ggplot()` creates a coordinate system to which you can add layers to. The first argument of `ggplot()` is the dataset to use in the graph. So `ggplot(data = d_exp)` creates an empty graph.
+
+For example, the following R code takes the `KLF4` and `RUNX1` data set to initialize the `ggplot` and then a layer (geom_point()) is added onto the ggplot to create a scatter plot of x = KLF4 by y = RUNX1:
+
+1. __Data=__ `d_exp`
+2. __Aesthetic=:__ aes(x=KLF4, y=RUNX1)
+3. __Geometry=__ `geom_point()`
+
+```{r}
+ggplot(d_exp)
+```
+
+
+```{r}
+ggplot(d_exp, aes(x=KLF4, y=RUNX1))
+```
+
+```{r}
+ggplot(d_exp, aes(x=KLF4, y=RUNX1)) + geom_point()
+```
+
+```{r}
+ggplot(d_exp, aes(x=KLF4, y=RUNX1)) + geom_point(size = 1.2, color = "steelblue", shape = 21)
+```
+
+It’s also possible to control points shape and color by a grouping variable (here, `Sample`). For example, in the code below, we map points `color` and `shape` to the datasets grouping variable.
+
+Note that, a `ggplot` can be holded in a variable, say `p`, to be printed later
+
+```{r}
+# Control points color by groups
+ggplot(d_exp, aes(x=KLF4, y=RUNX1))+
+  geom_point(aes(color = Sample))
+
+# Change the default color manually.
+# Use the scale_color_manual() function
+p <- ggplot(d_exp, aes(x=KLF4, y=RUNX1))+
+  geom_point(aes(color = Sample))+
+  scale_color_manual(values = c("#00AFBB", "#E7B800", "#FC4E07", "#A2AFBB", "#17B8AB", "#3F4E77", "#FCFA27", "#BFAFFB", "#69B89B", "#7F4E97"))
+print(p)
+```
+
+## GGPlot theme
+
+Note that, the default theme of ggplots is `theme_gray()` (or `theme_grey()`), which is theme with grey background and white grid lines. More themes are available for professional presentations or publications. These include: `theme_bw()`, `theme_classic()` and `theme_minimal()`.
+
+To change the theme of a given ggplot (p), use this: `p + theme_classic()`. 
+
+```{r}
+p <- ggplot(d_exp, aes(x=KLF4, y=RUNX1))+
+  geom_point(aes(color = Sample))+
+  scale_color_manual(values = c("#00AFBB", "#E7B800", "#FC4E07", "#A2AFBB", "#17B8AB", "#3F4E77", "#FCFA27", "#BFAFFB", "#69B89B", "#7F4E97"))
+p <- p + theme_classic()
+print(p)
+
+```
+```{r}
+df <- reducedDim(sce)
+head(df)
+```
+
+## Adding layers to ggplot, Lines (Prediction Line)
+A plot constructed with ggplot can have more than one geom. In that case the mappings established in the `ggplot()` call are plot defaults that can be added to or overridden. Our plot could use a regression line:
+```{r}
+d_exp$pred.SC <- predict(lm(RUNX1 ~ KLF4, data = d_exp))
+
+ggplot(d_exp, aes(x = KLF4, y = RUNX1)) + 
+  geom_point(aes(color = Sample)) +
+  geom_line(aes(y = pred.SC)) +
+  theme_classic()
+```
+
+
+## `Title`, `xlab` & `ylab`
+```{r}
+df <- as.data.frame(reducedDim(sce))
+df$Sample <- colData(sce)$Sample
+p <- ggplot(df, aes(x=V1, y=V2))+
+  geom_point(size = 0.4, aes(color = Sample))+
+  scale_color_manual(values = c("#00AFBB", "#E7B800", "#FC4E07", "#A2AFBB", "#17B8AB", "#3F4E77", "#FCFA27", "#BFAFFB", "#69B89B", "#7F4E97")) + 
+  ggtitle('t-SNE plot for Samples') + 
+  xlab('tSNE-1') + 
+  ylab('tSNE-2') + 
+  theme_classic()
+
+p
+```
+
+```{r}
+df <- as.data.frame(reducedDim(sce))
+df$Sample <- colData(sce)$Sample
+p <- ggplot(df, aes(x=V1, y=V2))+
+  geom_point(size = 0.4, aes(color = Sample))+
+  scale_color_manual(values = c("#00AFBB", "#E7B800", "#FC4E07", "#A2AFBB", "#17B8AB", "#3F4E77", "#FCFA27", "#BFAFFB", "#69B89B", "#7F4E97")) + 
+  ggtitle('t-SNE plot for Samples') + 
+  xlab('tSNE-1') + 
+  ylab('tSNE-2') + 
+  theme_classic() + 
+  guides(colour = guide_legend(override.aes = list(size=4)))
+
+p
+```
+## Histogram
+
+```{r}
+ggplot(d_exp, aes(x=total_counts)) + geom_histogram() + theme_classic() 
+```
+
+
+## Density plot
+```{r}
+df <- data.frame(x=log10(sce$total_counts+1), Sample = sce$Sample)
+ggplot(df,
+       aes(x = x, fill = as.factor(Sample))) + 
+       geom_density(alpha = 0.5) +
+       labs(x = expression('log'[10]*'(Library Size)'), title = "Total reads density", fill = "Sample") + 
+       theme_classic(base_size = 14) + # Setting the base size text for plots
+       scale_fill_manual(values = c("#00AFBB", "#E7B800", "#FC4E07", "#A2AFBB", "#17B8AB", "#3F4E77", "#FCFA27", "#BFAFFB", "#69B89B", "#7F4E97")) # Need to set fill manual
+```
+
+## Facet
+
+```{r}
+df <- data.frame(x=log10(sce$total_counts+1), Sample = sce$Sample)
+ggplot(df,
+       aes(x = x, fill = as.factor(Sample))) + 
+       geom_density(alpha = 0.5) +
+       labs(x = expression('log'[10]*'(Library Size)'), title = "Total reads density", fill = "Sample") + 
+       theme_classic(base_size = 14) + # Setting the base size text for plots
+       scale_fill_manual(values = c("#00AFBB", "#E7B800", "#FC4E07", "#A2AFBB", "#17B8AB", "#3F4E77", "#FCFA27", "#BFAFFB", "#69B89B", "#7F4E97")) +  # Need to set fill manual 
+  facet_wrap(~Sample)
+```
+
+# Statistical Transformations
+## Statistical Transformations
+Some plot types (such as scatterplots) do not require transformations–each point is plotted at x and y coordinates equal to the original value. Other plots, such as boxplots, histograms, prediction lines etc. require statistical transformations:
+
+- for a smoother the y values must be transformed into predicted values
+
+```{r}
+ggplot(d_exp, aes(x = KLF4, y = RUNX1)) + 
+  geom_point(aes(color = Sample)) +
+  geom_smooth() +
+  theme_classic()
+```
+
+```{r}
+ggplot(d_exp, aes(x = KLF4, y = RUNX1)) + 
+  geom_point(aes(color = Sample)) +
+  geom_smooth(method = "lm") +
+  theme_classic()
+```
+
+# Excercises
+First let us look at the mpg dataset
+```{r}
+mpg
+```
+
+
+## Excercise #1
+1. How would you plot the relationship between `cty`, the average city mileage, and `hwy`, the average highway mileage? How would you describe this relationship?
+
+
+<details><summary>Click here for answer</summary>
+
+```{r code1}
+ggplot(mpg, aes(cty, hwy)) + 
+  geom_point() +
+  theme_classic()
+```
+
+</details>
+
+<br>
+
+2. How would you draw a smooth line? Also, how would you colour the transmissions differently?
+
+<details><summary>Click here for answer</summary>
+```{r code1_1}
+ggplot(mpg, aes(cty, hwy)) + 
+  geom_point(aes(colour = drv)) +
+  geom_smooth(method = "lm") +
+  theme_classic()
+```
+
+</details>
+
+
+## Excercise #2
+Show the distribution of scores for `hwy`, highway miles per gallon
+
+
+<details><summary>Click here for answer</summary>
+
+```{r code2}
+ggplot(mpg, aes(hwy)) + 
+  geom_histogram()
+```
+
+</details>
+
+## Excercise #3
+Produce a similar plot as shown below
+
+```{r, echo=FALSE}
+ggplot(mpg, aes(x=displ, y=cty, colour=drv, size=cyl)) +
+  geom_point() + theme_classic()
+```
+
+<details><summary>Click here for answer</summary>
+
+```{r code3}
+ggplot(mpg, aes(x=displ, y=cty, colour=drv, size=cyl)) +
+  geom_point() + theme_classic()
+```
+
+</details>
+
+
