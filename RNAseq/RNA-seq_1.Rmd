@@ -40,7 +40,7 @@ Here, we will just load the *airway* package which include the data we need (*Sa
 library("airway")
 ```
 
-We will use R funrtion 'system.file' to find out where 'airway' package has stored the data.
+We will use R function 'system.file' to find out where 'airway' package has stored the data.
 
 ```{r}
 dir <- system.file("extdata", package="airway", mustWork=TRUE)
