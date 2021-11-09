@@ -1,0 +1,327 @@
+---
+title: Introduction to Tidyverse
+output: html_document
+---
+
+<img src="images/banner_introRProg.png" align="left" />
+
+<table style="float:right;">
+    <tr>
+        <td>                      
+            <div style="text-align: right"><a href="https://www.research.manchester.ac.uk/portal/syed.murtuzabaker.html" target="_blank">Syed Murtuza Baker</a></div>
+            <div style="text-align: right">Research Fellow</div>
+            <div style="text-align: right">University of Manchester</div>
+         </td>
+         <td>
+             <img src="images/Syed_Baker.jpg" width="50%" />
+         </td>
+     </tr>
+</table>
+
+# Introduction to Tidyverse
+****
+
+#### About this Notebook
+This notebook introduces Tidyverse
+
+Level: <code>beginner</code> 
+
+Duration: Approximately 2 hours to complete
+
+<div class="alert alert-block alert-warning"><b>Learning Objectives:</b> 
+<br/> At the end of this notebook you will be able to:
+    
+- Describe the features of the Tidyverse R package
+    
+- Explain the use of different functions such as Tibble, Pipe, 
+    
+- Explore deployr, Mutate, Slice & Arrange
+
+
+</div> 
+
+<a id="top"></a>
+
+<b>Table of contents</b><br>
+
+1.0 [Introduction](#intro)
+
+2.0 [About Tidyverse](#tidyverse)
+
+3.0 [Your Turn](#yourturn)
+
+*****
+
+<a id="intro"></a>
+
+## Introduction
+
+
+This notebook intrdouces `tidyverse`, a collection of R packages popular for data wrangling.
+
+For help in using this Jupyter notebook please refer to the [Jupyter Notebook User Guide](https://online.manchester.ac.uk/bbcswebdav/orgs/I3116-ADHOC-I3HS-HUB-1/Jupyter%20Notebooks/content/index.html#/)
+
+
+
+
+
+*****
+[back to the top](#top)
+
+<a id="tidyverse"></a>
+
+## About Tidyverse
+
+tidyverse.org defines Tidyverse as
+
+>The tidyverse is an opinionated collection of R packages designed for data science. All packages share an underlying design philosophy, grammar, and data structures.
+
+```{r}
+library(tidyverse)
+library(dplyr)
+library(scater)
+```
+
+We will use single-cell RNA sequencing on 6826 stem cells from Chronic myelomonocytic leukaemia (CMML) patients and healthy controls using the droplet-based, ultra-high-throughput 10x platform. We found substantial inter and intra-patient heterogeneity, with CMML stem cells displaying distinctive transcriptional programs. Compared with normal controls, CMML stem cells exhibited transcriptomes characterized by increased expression of myeloid-lineage and cell cycle genes, and lower expression of genes selectively expressed by normal haematopoietic stem cells.
+
+```{r}
+sce <- readRDS('sce.rds')
+```
+
+*****
+[back to the top](#top)
+
+### Tibble
+
+Tibbles are data-frames
+tibble() does much less: it never changes the type of the inputs (e.g. it never converts strings to factors!)
+it never changes the names of variables, and it never creates row names.
+tibble can have column names that are not valid R variable names, aka non-syntactic names.
+
+```{r}
+tb <- tibble(
+  `:)` = "smile", 
+  ` ` = "space",
+  `2000` = "number"
+)
+tb
+```
+
+### Pipe %>%
+
+Pipe %>% passes the output from one stage to the other.
+
+```{r}
+tbl_df(colData(sce))[1:5,1:5]
+```
+
+```{r}
+tbl_df(colData(sce)) %>%
+  group_by(Sample) %>%
+  summarise(
+    total.features = mean(total_features),
+    total.counts = mean(total_counts)
+  )
+```
+
+`summarise()` ungrouping output (override with `.groups` argument)
+
+### dplyr - Functions as verbs.
+
+The most useful
+
+<code>select()</code>: select columns
+
+<code>mutate()</code>: create new variables, change existing
+
+<code>filter()</code>: subset your data by some criterion
+
+<code>summarize()</code>: summarize your data in some way
+
+<code>group_by()</code>: group your data by a variable
+
+<code>slice()</code>: grab specific rows
+
+<code>select()</code>: select an observation
+
+Some others
+
+<code>count()</code>: count your data
+
+<code>arrange()</code>: arrange your data by a column or variable
+
+<code>distinct()</code>: gather all distinct values of a variable
+
+<code>n_distinct()</code>: count how many distinct values you have (only works with summarize)
+
+<code>n()</code>: count how many observation you have for a subgroup
+
+<code>sample_n()</code>: Grab an N sample of your data
+
+<code>ungroup()</code>: ungroup grouped data by a variable
+
+<code>top_n()</code>: get the top N number of entries from a data frame
+
+
+To make it easier we copy the metadata for our <code>SingleCellExperiment</code> object <code>sce</code> to <code>d</code>
+
+```{r}
+d <- tbl_df(colData(sce))
+```
+
+```{r}
+d %>% 
+  select(Sample, Cluster, cellType) %>%
+  head(10)
+```
+
+#### Filter : To select rows
+
+```{r}
+d %>% 
+  filter(cellType == "HSC") %>%
+  head(10)
+```
+
+```{r}
+d %>% 
+  select(barcode, Sample, total_features, cellType, Cluster) %>%
+  filter(Sample == "BC572") %>%
+  head(10)
+```
+
+```{r}
+d %>% 
+  filter(cellType == "Erythrocytes", pct_counts_Mt > 1.5) %>% 
+  select(barcode, Sample, pct_counts_Mt, cellType, Cluster) %>%
+  head(10)
+```
+
+#### Mutate
+
+To create new variables in the data table:
+
+```{r}
+d_exp <- d
+d_exp <- cbind(d_exp, t(logcounts(sce)[c('KLF4','RUNX1','EGR1'),]))
+```
+
+```{r}
+d_exp %>% head(10)
+```
+
+```{r}
+d_exp %>% 
+  mutate(Klf4Diff = abs(KLF4 - RUNX1)) %>%
+  select(barcode, Sample, cellType, Klf4Diff) %>%
+  head(10)
+```
+
+#### Arrange
+
+To order the data by a particular variable:
+
+```{r}
+d_exp %>% 
+  mutate(Klf4Diff = abs(KLF4 - RUNX1)) %>% 
+  arrange(desc(Klf4Diff)) %>%
+  head(5)
+```
+
+#### Group by + sumarize : forget about loops
+
+First: group by a particular variables Second: summarize the data with new statistics. Summarize: Turn many rows into one.
+
+Examples:
+
+```
+min(x) - minimum value of vector x.
+
+max(x) - maximum value of vector x.
+
+mean(x) - mean value of vector x.
+
+median(x) - median value of vector x.
+
+quantile(x, p) - pth quantile of vector x.
+
+sd(x) - standard deviation of vector x.
+
+var(x) - variance of vector x.
+
+IQR(x) - Inter Quartile Range (IQR) of vector x.
+
+diff(range(x)) - total range of vector x.
+
+```
+
+```{r}
+d %>% 
+  group_by(cellType) %>% 
+  summarise(mean_total_counts = mean(total_counts, na.rm = TRUE), sd_total_counts = sd(total_counts), 
+     mean_pct_Mt_count = mean(pct_counts_Mt), count = n()) %>% 
+  #ungroup() %>% 
+  slice_max(., n=20, order_by = mean_total_counts)  # note here, it does 
+```
+
+`summarise()` ungrouping output (override with `.groups` argument)
+
+<div class="alert alert-success">
+    <strong>Note:</strong> <code>mutate()</code> either changes an existing column or adds a new one. summarise() calculates a single value (per group). As you can see, in the first example, new column is added.</a>.
+</div>
+
+*****
+[back to the top](#top)
+
+<a id="yourturn"></a>
+## Your Turn
+
+Let us look at the mpg dataset first
+
+```{r}
+head(mpg)
+```
+
+<div class="alert alert-block alert-info">
+    <b>Task 1</b><br/>
+   <p>Select only teh audi cars from the above list</p> 
+</div>
+
+```{r}
+mpg %>% 
+  filter(manufacturer == "audi")
+```
+
+Let us look at how many cars are there in the list
+
+```{r}
+table(mpg$manufacturer)
+```
+
+<div class="alert alert-block alert-info">
+    <b>Task2</b></br>
+<p>How many Ford cars are there?</p>
+</div>
+
+```{r}
+mpg %>% 
+  filter(manufacturer == "ford") %>%
+  summarize(Ford_cars = n())
+```
+
+*****
+[back to the top](#top)
+
+### Notebook details
+<br>
+<i>Notebook created by <strong>Syed Murtuza Baker</strong>. Other contributors include Fran Hooley... 
+
+Publish date: May 2021<br>
+Review date: May 2022</i>
+
+Please give your feedback using the button below:
+
+****
+
+## Your Notes:
+
